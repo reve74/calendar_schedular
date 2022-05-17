@@ -1,9 +1,28 @@
+import 'package:calendar_scheduler/component/calendar.dart';
 import 'package:calendar_scheduler/component/custom_text_field.dart';
 import 'package:calendar_scheduler/const/colors.dart';
+import 'package:calendar_scheduler/model/category_color.dart';
+import 'package:drift/drift.dart' show Value; // Value 라는 클래스만 drift 패키지에서 불러옴.
 import 'package:flutter/material.dart';
+import 'package:get_it/get_it.dart';
+import 'package:calendar_scheduler/database/drift_database.dart';
 
-class ScheduleBottomSheet extends StatelessWidget {
-  const ScheduleBottomSheet({Key? key}) : super(key: key);
+class ScheduleBottomSheet extends StatefulWidget {
+  final DateTime selectedDate;
+
+  const ScheduleBottomSheet({required this.selectedDate, Key? key})
+      : super(key: key);
+
+  @override
+  State<ScheduleBottomSheet> createState() => _ScheduleBottomSheetState();
+}
+
+class _ScheduleBottomSheetState extends State<ScheduleBottomSheet> {
+  final GlobalKey<FormState> formKey = GlobalKey();
+  int? startTime;
+  int? endTime;
+  String? content;
+  int? selectedColorId;
 
   @override
   Widget build(BuildContext context) {
@@ -12,7 +31,8 @@ class ScheduleBottomSheet extends StatelessWidget {
 
     return GestureDetector(
       onTap: () {
-        FocusScope.of(context).requestFocus(FocusNode()); // 현재 포커스가 되어있는 텍스트필드에서 포커스를 없앨 수 있다.
+        FocusScope.of(context)
+            .requestFocus(FocusNode()); // 현재 포커스가 되어있는 텍스트필드에서 포커스를 없앨 수 있다.
       },
       child: SafeArea(
         child: Container(
@@ -26,17 +46,49 @@ class ScheduleBottomSheet extends StatelessWidget {
                 right: 8.0,
                 left: 8.0,
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _Time(),
-                  const SizedBox(height: 16.0),
-                  _Content(),
-                  const SizedBox(height: 16.0),
-                  _ColorsPicker(),
-                  const SizedBox(height: 8.0),
-                  _SaveButton(),
-                ],
+              child: Form(
+                key: formKey,
+                autovalidateMode: AutovalidateMode.always, // 자동으로 밸리데이션 작동.
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _Time(
+                      onStartSaved: (String? val) {
+                        startTime = int.parse(val!);
+                      },
+                      onEndSaved: (String? val) {
+                        endTime = int.parse(val!);
+                      },
+                    ),
+                    const SizedBox(height: 16.0),
+                    _Content(
+                      onSaved: (String? val) {
+                        content = val;
+                      },
+                    ),
+                    const SizedBox(height: 16.0),
+                    FutureBuilder<List<CategoryColor>>(
+                        future: GetIt.I<LocalDatabase>().getCategoryColors(),
+                        builder: (context, snapshot) {
+                          if (snapshot.hasData &&
+                              selectedColorId == null &&
+                              snapshot.data!.isNotEmpty) {
+                            selectedColorId = snapshot.data![0].id;
+                          }
+                          return _ColorsPicker(
+                            colors: snapshot.hasData ? snapshot.data! : [],
+                            selectedColorId: selectedColorId,
+                            colorIdSetter: (int id) {
+                              setState(() {
+                                selectedColorId = id;
+                              });
+                            },
+                          );
+                        }),
+                    const SizedBox(height: 8.0),
+                    _SaveButton(onPressed: onSavedPressed),
+                  ],
+                ),
               ),
             ),
           ),
@@ -44,21 +96,62 @@ class ScheduleBottomSheet extends StatelessWidget {
       ),
     );
   }
+
+  void onSavedPressed() async {
+    // formKey 는 생성을 했는데
+    // Form 위젯과 결합을 안했을 때
+    if (formKey.currentState == null) {
+      return;
+    }
+
+    if (formKey.currentState!.validate()) {
+      print('에러가 없습니다.');
+      formKey.currentState!.save();
+      print('-------');
+      print('startTime : ${startTime}');
+      print('endTime : ${endTime}');
+      print('content : ${content}');
+
+      final key = await GetIt.I<LocalDatabase>().createSchedule(
+        SchedulesCompanion(
+          date: Value(widget.selectedDate),
+          startTime: Value(startTime!),
+          endTime: Value(endTime!),
+          content: Value(content!),
+          colorId: Value(selectedColorId!),
+        ),
+      );
+      Navigator.of(context).pop();
+    } else {
+      print('에러가 있습니다.!');
+    }
+  }
 }
 
 class _Time extends StatelessWidget {
-  const _Time({Key? key}) : super(key: key);
+  final FormFieldSetter<String> onStartSaved;
+  final FormFieldSetter<String> onEndSaved;
+  const _Time({required this.onStartSaved, required this.onEndSaved, Key? key})
+      : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
         Expanded(
-          child: CustomTextField(isTime: true,label: '시작시간'),
+          child: CustomTextField(
+            isTime: true,
+            label: '시작시간',
+            onSaved: onStartSaved,
+          ),
         ),
         const SizedBox(width: 16),
         Expanded(
-          child: CustomTextField(isTime: true,label: '마감시간'),
+          child: CustomTextField(
+            isTime: true,
+            label: '마감시간',
+            onSaved: onEndSaved,
+          ),
         ),
         SizedBox(height: 16.0),
       ],
@@ -67,42 +160,74 @@ class _Time extends StatelessWidget {
 }
 
 class _Content extends StatelessWidget {
-  const _Content({Key? key}) : super(key: key);
+  final FormFieldSetter<String> onSaved;
+  const _Content({required this.onSaved, Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return Expanded(
-      child: CustomTextField(isTime: false,label: '내용'),
+      child: CustomTextField(
+        isTime: false,
+        label: '내용',
+        onSaved: onSaved,
+      ),
     );
   }
 }
 
+typedef ColorIdSetter = void Function(int id);
+
 class _ColorsPicker extends StatelessWidget {
-  const _ColorsPicker({Key? key}) : super(key: key);
+  final List<CategoryColor> colors;
+  final int? selectedColorId;
+  final ColorIdSetter colorIdSetter;
+
+  const _ColorsPicker(
+      {required this.colors,
+      required this.selectedColorId,
+      required this.colorIdSetter,
+      Key? key})
+      : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return Wrap(
       spacing: 8.0,
       runSpacing: 10.0,
-      children: [
-        renderColor(Colors.red),
-        renderColor(Colors.orange),
-        renderColor(Colors.yellow),
-        renderColor(Colors.green),
-        renderColor(Colors.blue),
-        renderColor(Colors.indigo),
-        renderColor(Colors.purple),
-      ],
+      children: colors
+          .map(
+            (e) => GestureDetector(
+              onTap: () {
+                colorIdSetter(e.id);
+              },
+              child: renderColor(e, selectedColorId == e.id),
+            ),
+          )
+          .toList(),
+      // [
+      //   renderColor(Colors.red),
+      //   renderColor(Colors.orange),
+      //   renderColor(Colors.yellow),
+      //   renderColor(Colors.green),
+      //   renderColor(Colors.blue),
+      //   renderColor(Colors.indigo),
+      //   renderColor(Colors.purple),
+      // ],
     );
   }
 
-  Widget renderColor(Color color) {
+  Widget renderColor(CategoryColor color, bool isSelected) {
     return Container(
       decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: color,
-      ),
+          shape: BoxShape.circle,
+          color: Color(
+            int.parse(
+              'FF${color.hexCode}',
+              radix: 16,
+            ),
+          ),
+          border:
+              isSelected ? Border.all(color: Colors.black, width: 4.0) : null),
       width: 32.0,
       height: 32.0,
     );
@@ -110,7 +235,9 @@ class _ColorsPicker extends StatelessWidget {
 }
 
 class _SaveButton extends StatelessWidget {
-  const _SaveButton({Key? key}) : super(key: key);
+  final VoidCallback onPressed;
+
+  const _SaveButton({required this.onPressed, Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -121,7 +248,7 @@ class _SaveButton extends StatelessWidget {
             style: ElevatedButton.styleFrom(
               primary: PRIMARY_COLOR,
             ),
-            onPressed: () {},
+            onPressed: onPressed,
             child: Text('저장'),
           ),
         ),

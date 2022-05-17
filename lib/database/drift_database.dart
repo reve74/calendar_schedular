@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:calendar_scheduler/model/category_color.dart';
 import 'package:calendar_scheduler/model/schedule.dart';
+import 'package:calendar_scheduler/model/schedule_with_color.dart';
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:path/path.dart' as p;
@@ -27,10 +28,40 @@ class LocalDatabase extends _$LocalDatabase {
   Future<int> createCategoryColor(CategoryColorsCompanion data) =>
       into(categoryColors).insert(data);
 
+  removeSchedule(int id) =>
+      (delete(schedules)..where((tbl) => tbl.id.equals(id))).go();
 
   Future<List<CategoryColor>> getCategoryColors() =>
       select(categoryColors).get();
 
+  Stream<List<ScheduleWithColor>> watchSchedules(DateTime date) {
+    final query = select(schedules).join([
+      innerJoin(categoryColors, categoryColors.id.equalsExp(schedules.colorId))
+    ]);
+    query.where(schedules.date.equals(date));
+    query.orderBy([
+      OrderingTerm.asc(schedules.startTime),
+    ]);
+    return query.watch().map(
+          (rows) => rows
+              .map(
+                (row) => ScheduleWithColor(
+                  schedule: row.readTable(schedules),
+                  categoryColor: row.readTable(categoryColors),
+                ),
+              )
+              .toList(),
+        );
+  }
+  // 1.
+  // final query = select(schedules);
+  // query.where((tbl) => tbl.date.equals(date));
+  // return query.watch();
+
+  // 2.
+  // .. -> where 를 실행한 대상인 select 가 리턴되므로 watch()를 가능할 수 있게한다.
+  // Stream -> watch
+  // (select(schedules)..where((tbl) => tbl.date.equals(date))).watch();
 
   @override
   int get schemaVersion => 1;
