@@ -28,7 +28,13 @@ class LocalDatabase extends _$LocalDatabase {
   Future<int> createCategoryColor(CategoryColorsCompanion data) =>
       into(categoryColors).insert(data);
 
-  removeSchedule(int id) =>
+  Future<int> updateScheduleById(int id, SchedulesCompanion data) =>
+      (update(schedules)..where((tbl) => tbl.id.equals(id))).write(data);
+
+  // getSingle -> 하나의 값만 리턴받음
+  Future<Schedule> getScheduleById(int id)=> (select(schedules)..where((tbl) => tbl.id.equals(id))).getSingle();
+
+  Future<int> removeSchedule(int id) =>
       (delete(schedules)..where((tbl) => tbl.id.equals(id))).go();
 
   Future<List<CategoryColor>> getCategoryColors() =>

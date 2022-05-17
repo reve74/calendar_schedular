@@ -4,15 +4,18 @@ import 'package:flutter/services.dart';
 
 class CustomTextField extends StatelessWidget {
   final String label;
+  final String initialValue;
+
   // true = 시간 / false = 내용
   final bool isTime;
   final FormFieldSetter<String> onSaved;
 
   const CustomTextField(
       {required this.label,
+      required this.initialValue,
       required this.isTime,
       required this.onSaved,
-       Key? key})
+      Key? key})
       : super(key: key);
 
   @override
@@ -61,6 +64,7 @@ class CustomTextField extends StatelessWidget {
       maxLines: isTime ? 1 : null,
       maxLength: !isTime ? 100 : null,
       expands: !isTime,
+      initialValue: initialValue,
       keyboardType: isTime ? TextInputType.number : TextInputType.multiline,
       inputFormatters: isTime
           ? [
@@ -68,11 +72,10 @@ class CustomTextField extends StatelessWidget {
             ]
           : [],
       decoration: InputDecoration(
-        border: InputBorder.none,
-        filled: true,
-        fillColor: Colors.grey[300],
-        suffixText: isTime ? '시' : null
-      ),
+          border: InputBorder.none,
+          filled: true,
+          fillColor: Colors.grey[300],
+          suffixText: isTime ? '시' : null),
     );
   }
 }
